@@ -20,27 +20,23 @@ class ReLU6(function.Function):
 		)
 
 	def forward_cpu(self, x):
-		self.retain_inputs(())
-		self.retain_outputs((0,))
-		return utils.force_array(numpy.minimum(numpy.maximum(x[0], 0, dtype=x[0].dtype), 6, dtype=x[0].dtype)),
-
-	def forward_gpu(self, x):
-		self.retain_inputs(())
-		self._use_cudnn = False
-		y = cuda.cupy.minimum(cuda.cupy.maximum(x[0], 0), 6)
-		self.retain_outputs((0,))
-		return y,
+		x = x[0]
+		return utils.force_array(numpy.minimum(numpy.maximum(0, x), 6), x.dtype),
 
 	def backward_cpu(self, x, gy):
-		y = self.output_data[0]
-		return utils.force_array(gy[0] * (0 < y) * (y < 6)),
+		x = x[0]
+		return utils.force_array(gy[0] * (0 < x) * (x < 6), x.dtype),
+
+	def forward_gpu(self, x):
+		return cuda.elementwise(
+			'T x', 'T y', 'y = min(max(x, (T)0), (T)6)',
+			'clipped_relu_fwd')(x[0]),
 
 	def backward_gpu(self, x, gy):
-		y = self.output_data[0]
 		gx = cuda.elementwise(
-			'T y, T gy', 'T gx',
-			'gx = (0 < y && y < 6) ? gy : (T)0',
-			'relu_bwd')(y, gy[0])
+			'T x, T gy', 'T gx',
+			'gx = ((x > 0) & (x < 6))? gy : (T)0',
+			'clipped_relu_bwd')(x[0], gy[0])
 		return gx,
 
 
